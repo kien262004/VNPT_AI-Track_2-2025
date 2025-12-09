@@ -23,6 +23,10 @@ json_data = {
     'top_k': 20,
     'n': 1,
     'max_completion_tokens': 256,
+    'response_format': {
+        "type":
+        "json_object"
+    }
 }
 response = requests.post('https://api.idg.vnpt.vn/data-service/v1/chat/completions/vnptai-hackathon-large', headers=headers, json=json_data)
-print(response.json())
+print(response.json()['choices'][0]['message']['content'])
