@@ -22,7 +22,7 @@ json_data = {
     'top_p': 1.0,
     'top_k': 20,
     'n': 1,
-    'max_completion_tokens': 10,
+    'max_completion_tokens': 256,
 }
-response = requests.post('https://api.idg.vnpt.vn/data-service/vnptai-hackathon-large', headers=headers, json=json_data)
+response = requests.post('https://api.idg.vnpt.vn/data-service/v1/chat/completions/vnptai-hackathon-large', headers=headers, json=json_data)
 print(response.json())

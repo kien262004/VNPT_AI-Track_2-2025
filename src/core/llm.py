@@ -109,8 +109,6 @@ class SmallLLM(BaseChatModel):
             "Token-key": os.getenv("TOKEN_KEY_VNPT_SMALL"),
             "Content-Type": "application/json",
         }
-
-        print("VNPT Small LLM _generate called with messages:", headers, messages)
         
         # Convert LangChain messages -> VNPT format
         payload_messages = []
@@ -135,7 +133,7 @@ class SmallLLM(BaseChatModel):
 
         try:
             res = requests.post(
-                "https://api.idg.vnpt.vn/data-service/vnptai-hackathon-small",
+                "https://api.idg.vnpt.vn/data-service/v1/chat/completions/vnptai-hackathon-small",
                 headers=headers,
                 json=json_data,
                 timeout=15
@@ -149,6 +147,75 @@ class SmallLLM(BaseChatModel):
             generations=[ChatGeneration(message=AIMessage(content=text))]
         )
 
+class LargeLLM(BaseChatModel):
+    
+    temperature: float = 0.3
+    top_p: float = 1.0
+    top_k: int = 20
+    max_tokens: int = 256
+    
+    def __init__(self, temperature: float = 0.3, top_p: float = 1.0, top_k: int = 20, max_tokens: int = 256) -> None:
+        super().__init__()
+        self.temperature = temperature
+        self.top_p = top_p
+        self.top_k = top_k
+        self.max_tokens = max_tokens
+
+
+    # ---- LangChain required properties ----
+    @property
+    def _llm_type(self) -> str:
+        return "vnpt_ai"
+
+    # ---- Core generate function ----
+    def _generate(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+    ):
+        headers = {
+            "Authorization": f"Bearer {os.getenv('AUTHORIZATION_VNPT_LARGE')}",
+            "Token-id": os.getenv("TOKEN_ID_VNPT_LARGE"),
+            "Token-key": os.getenv("TOKEN_KEY_VNPT_LARGE"),
+            "Content-Type": "application/json",
+        }
+        
+        # Convert LangChain messages -> VNPT format
+        payload_messages = []
+        for m in messages:
+            if isinstance(m, HumanMessage):
+                payload_messages.append({"role": "user", "content": m.content})
+            elif isinstance(m, AIMessage):
+                payload_messages.append({"role": "assistant", "content": m.content})
+            elif isinstance(m, SystemMessage):
+                payload_messages.append({"role": "system", "content": m.content})
+            elif isinstance(m, ChatMessage):
+                payload_messages.append({"role": m.role, "content": m.content})
+
+        json_data = {
+            "model": "vnptai_hackathon_large",
+            "messages": payload_messages,
+            "temperature": self.temperature,
+            "top_p": self.top_p,
+            "top_k": self.top_k,
+            "max_completion_tokens": self.max_tokens,
+        }
+
+        try:
+            res = requests.post(
+                "https://api.idg.vnpt.vn/data-service/v1/chat/completions/vnptai-hackathon-large",
+                headers=headers,
+                json=json_data,
+                timeout=15
+            ).json()
+        except Exception as e:
+            raise ValueError(f"VNPT API error: {e}")
+
+        text = res["choices"][0]["message"]["content"]
+
+        return ChatResult(
+            generations=[ChatGeneration(message=AIMessage(content=text))]
+        )
     
 
 if __name__ == "__main__":
