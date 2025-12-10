@@ -150,7 +150,11 @@ class SmallLLM(BaseChatModel):
                 timeout=15
             ).json()
         except Exception as e:
-            raise ValueError(f"VNPT API error: {e}")
+            raise ValueError(f"VNPT API request error: {e}")
+
+        # Debug nếu API trả về lỗi, không có 'choices'
+        if "choices" not in res:
+            raise ValueError(f"VNPT API logical error response: {res}")
 
         print("VNPT API response:", res)
         text = res["choices"][0]["message"]["content"]
@@ -158,6 +162,7 @@ class SmallLLM(BaseChatModel):
         return ChatResult(
             generations=[ChatGeneration(message=AIMessage(content=text))]
         )
+
 
 class LargeLLM(BaseChatModel):
     
@@ -225,7 +230,12 @@ class LargeLLM(BaseChatModel):
                 timeout=15
             ).json()
         except Exception as e:
-            raise ValueError(f"VNPT API error: {e}")
+            raise ValueError(f"VNPT API request error: {e}")
+
+        # Debug nếu API trả về lỗi, không có 'choices'
+        if "choices" not in res:
+            raise ValueError(f"VNPT API logical error response: {res}")
+
         text = res["choices"][0]["message"]["content"]
 
         return ChatResult(
