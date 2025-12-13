@@ -269,7 +269,6 @@ class Router:
             }
         data = self.chain.invoke({"question": question})
         raw = data.content.encode('utf-8')
-        print("Raw response:", raw)
         return json.loads(raw)
 
 
