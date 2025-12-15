@@ -3,3 +3,4 @@ langchain
 requests
 langchain_openai
 langchain-google-genai
+numpy

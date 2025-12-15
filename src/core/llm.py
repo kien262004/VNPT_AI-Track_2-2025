@@ -147,7 +147,7 @@ class SmallLLM(BaseChatModel):
                 "https://api.idg.vnpt.vn/data-service/v1/chat/completions/vnptai-hackathon-small",
                 headers=headers,
                 json=json_data,
-                timeout=15
+                timeout=300
             ).json()
         except Exception as e:
             raise ValueError(f"VNPT API request error: {e}")
@@ -227,7 +227,7 @@ class LargeLLM(BaseChatModel):
                 "https://api.idg.vnpt.vn/data-service/v1/chat/completions/vnptai-hackathon-large",
                 headers=headers,
                 json=json_data,
-                timeout=15
+                timeout=60
             ).json()
         except Exception as e:
             raise ValueError(f"VNPT API request error: {e}")

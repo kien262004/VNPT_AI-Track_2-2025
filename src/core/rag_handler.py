@@ -3,7 +3,7 @@ RAG Handler for Long Text Questions
 Xử lý câu hỏi dài (>500 từ) bằng cách:
 1. Tách câu hỏi và đoạn văn context
 2. Chia văn bản thành chunks nhỏ
-3. Tìm chunks liên quan nhất (similarity search)
+3. Tìm chunks liên quan nhất bằng VNPT Embedding (vector similarity)
 4. Trả về context thu gọn để gửi cho LLM
 """
 
@@ -12,23 +12,40 @@ import re
 
 
 class RAGHandler:
-    """Handler xử lý câu hỏi dài với RAG strategy"""
+    """Handler xử lý câu hỏi dài với RAG strategy (Embedding-based)"""
     
     def __init__(
         self, 
         chunk_size: int = 300,
         chunk_overlap: int = 50,
-        top_k: int = 3
+        top_k: int = 3,
+        use_embedding: bool = True
     ):
         """
         Args:
             chunk_size: Số từ tối đa trong mỗi chunk
             chunk_overlap: Số từ overlap giữa các chunks
             top_k: Số lượng chunks liên quan nhất để lấy
+            use_embedding: Dùng VNPT Embedding (True) hay keyword matching (False)
         """
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.top_k = top_k
+        self.use_embedding = use_embedding
+        
+        # Khởi tạo embedder nếu cần
+        if self.use_embedding:
+            try:
+                from .embedder import VNPTEmbedding
+                self.embedder = VNPTEmbedding()
+                print("[RAG] Sử dụng VNPT Embedding API cho retrieval")
+            except Exception as e:
+                print(f"[RAG] Warning: Không thể khởi tạo embedder ({e}), fallback về keyword matching")
+                self.use_embedding = False
+                self.embedder = None
+        else:
+            self.embedder = None
+            print("[RAG] Sử dụng keyword matching cho retrieval")
         
     def process(self, full_question: str) -> Tuple[str, str]:
         """
@@ -152,9 +169,9 @@ class RAGHandler:
         """
         Tìm các chunks liên quan nhất đến câu hỏi
         
-        Strategy: Simple keyword matching (TF-IDF-like)
-        - Đếm số từ khóa trong question xuất hiện ở chunk nào
-        - Rank theo số lượng match
+        Strategy: 
+        - Nếu use_embedding=True: Dùng VNPT Embedding + cosine similarity
+        - Nếu use_embedding=False: Keyword matching (fallback)
         
         Args:
             chunks: List các chunks
@@ -162,6 +179,53 @@ class RAGHandler:
             
         Returns:
             Top-k chunks liên quan nhất
+        """
+        if self.use_embedding and self.embedder:
+            return self._retrieve_with_embedding(chunks, question)
+        else:
+            return self._retrieve_with_keywords(chunks, question)
+    
+    def _retrieve_with_embedding(self, chunks: List[str], question: str) -> List[str]:
+        """
+        Retrieval dùng VNPT Embedding + cosine similarity
+        """
+        try:
+            # Embed question
+            question_embedding = self.embedder.embed_text(question)
+            
+            # Embed tất cả chunks
+            chunk_embeddings = []
+            for chunk in chunks:
+                emb = self.embedder.embed_text(chunk)
+                chunk_embeddings.append(emb)
+            
+            # Tính similarity scores
+            chunk_scores = []
+            for i, chunk in enumerate(chunks):
+                similarity = self.embedder.cosine_similarity(
+                    question_embedding, 
+                    chunk_embeddings[i]
+                )
+                chunk_scores.append((chunk, similarity))
+            
+            # Sort theo similarity giảm dần
+            chunk_scores.sort(key=lambda x: x[1], reverse=True)
+            
+            # Lấy top-k
+            top_chunks = [chunk for chunk, score in chunk_scores[:self.top_k]]
+            
+            # Debug log
+            print(f"  → Embedding similarity scores (top-3): {[f'{s:.3f}' for _, s in chunk_scores[:3]]}")
+            
+            return top_chunks
+            
+        except Exception as e:
+            print(f"  → Embedding error: {e}, fallback to keywords")
+            return self._retrieve_with_keywords(chunks, question)
+    
+    def _retrieve_with_keywords(self, chunks: List[str], question: str) -> List[str]:
+        """
+        Retrieval dùng keyword matching (fallback)
         """
         # Extract keywords từ question (bỏ stopwords)
         stopwords = {
