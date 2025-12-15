@@ -43,7 +43,7 @@ def ensure_csv_writer(submission_path: str) -> Tuple[csv.writer, "TextIO"]:
     fh = open(submission_path, "a", newline="", encoding="utf-8")
     writer = csv.writer(fh)
     if not existed:
-        writer.writerow(["qid", "answer"])
+        writer.writerow(["qid", "answer", "route"])
         fh.flush()
     return writer, fh
 
@@ -132,7 +132,7 @@ def main():
             # Quy ước: handler luôn trả về 'A'/'B'/... hoặc '' (rỗng) nếu quyết định không trả lời.
             ans = handler(llm_small, question, choices)
 
-            writer.writerow([qid, ans])
+            writer.writerow([qid, ans, datasource])
             fh.flush()
             answered_qids.add(qid)
             calls_made += 1

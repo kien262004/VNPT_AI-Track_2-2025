@@ -16,16 +16,34 @@ def load_val_answers(val_json_path: str) -> Dict[str, str]:
     return ans
 
 
-def load_predictions(csv_path: str) -> Dict[str, str]:
+def load_predictions(csv_path: str) -> Dict[str, tuple[str, str]]:
+    # qid -> (pred, route)
     preds = {}
     with open(csv_path, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
             qid = (row.get("qid") or "").strip()
             a = (row.get("answer") or "").strip().upper()
+            route = (row.get("route") or "").strip() or "UNKNOWN"
             if qid:
-                preds[qid] = a
+                preds[qid] = (a, route)
     return preds
+
+from collections import defaultdict
+
+def score_by_route(val: Dict[str, str], pred: Dict[str, tuple[str, str]]):
+    # route -> [correct, total, missing]
+    stats = defaultdict(lambda: {"correct": 0, "total": 0, "missing": 0})
+    for qid, gt in val.items():
+        if qid not in pred:
+            stats["MISSING"]["missing"] += 1
+            continue
+        p, r = pred[qid]
+        stats[r]["total"] += 1
+        if p == gt:
+            stats[r]["correct"] += 1
+    return stats
+
 
 
 def score(val: Dict[str, str], pred: Dict[str, str]) -> Tuple[int, int, int, int]:
@@ -46,16 +64,17 @@ def score(val: Dict[str, str], pred: Dict[str, str]) -> Tuple[int, int, int, int
     extra = sum(1 for qid in pred.keys() if qid not in val)
     return correct, wrong, missing, extra
 
-
-def dump_mismatches(val: Dict[str, str], pred: Dict[str, str], out_path: str):
+def dump_mismatches(val, pred, out_path):
     rows = []
     for qid, gt in val.items():
-        p = pred.get(qid, "")
+        if qid not in pred:
+            continue
+        p, r = pred[qid]
         if p != gt:
-            rows.append((qid, gt, p))
+            rows.append((qid, gt, p, r))
     with open(out_path, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["qid", "gold", "pred"])
+        w.writerow(["qid", "gold", "pred", "route"])
         w.writerows(rows)
 
 
@@ -87,6 +106,14 @@ def main():
 
     dump_mismatches(val, pred, args.mismatch_csv)
     print(f"Saved mismatches to: {args.mismatch_csv}")
+
+    stats = score_by_route(val, pred)
+    print("\n=== Accuracy by route ===")
+    for r, s in sorted(stats.items(), key=lambda x: x[0]):
+        total = s["total"]
+        correct = s["correct"]
+        acc = correct / total if total else 0.0
+        print(f"{r:24s}  total={total:4d}  correct={correct:4d}  acc={acc*100:6.2f}%")
 
 
 if __name__ == "__main__":
