@@ -1,3 +1,4 @@
 data/
 api_keys.json
 venv/
+src/core/__pycache__/
