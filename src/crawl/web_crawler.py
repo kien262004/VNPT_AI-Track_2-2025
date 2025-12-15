@@ -1,6 +1,5 @@
 import json
 import os
-from ..core import *
 from tqdm import tqdm
 import requests
 import numpy as np
@@ -71,7 +70,7 @@ def crawl(path, outpath):
     with open(path, mode='r') as f:
         data = json.load(f)
     res = []
-    llm = get_llm('openai-oss')
+    # llm = get_llm('openai-oss')
     for element in tqdm(data):
         if element['datasource'] not in ['Mandatory_Accuracy_Questions', 'Various_Domain']: continue
         res_web = query_crawl(element['question'])
@@ -84,5 +83,5 @@ def crawl(path, outpath):
         
     
 if __name__ == '__main__':
-    crawl('data/val_routed.json', 'data/val_web.json')
+    crawl('data/test_routed.json', 'data/test_web.json')
     

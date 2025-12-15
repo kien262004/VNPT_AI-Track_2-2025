@@ -162,7 +162,6 @@ class SmallLLM(BaseChatModel):
             generations=[ChatGeneration(message=AIMessage(content=text))]
         )
 
-
 class LargeLLM(BaseChatModel):
     
     temperature: float = 0.3
@@ -269,6 +268,66 @@ class Router:
         data = self.chain.invoke({"question": question})
         raw = data.content.encode('utf-8')
         return json.loads(raw)
+
+class VNPTAIEmbeddingClient:
+    def __init__(
+        self,
+        model: str = "vnptai_hackathon_embedding",
+        timeout: int = 30
+    ):
+        self.api_url = api_url
+        self.model = model
+        self.timeout = timeout
+
+        self.headers = {
+            "Authorization": f"Bearer {bearer_token}",
+            "Token-id": token_id,
+            "Token-key": token_key,
+            "Content-Type": "application/json",
+        }
+
+    def embed(
+        self,
+        texts: Union[str, List[str]],
+        normalize: bool = False
+    ):
+        """
+        texts: string hoặc list[string]
+        return: embedding vector hoặc list[vector]
+        """
+        if isinstance(texts, str):
+            texts = [texts]
+            single = True
+        else:
+            single = False
+
+        payload = {
+            "model": self.model,
+            "input": texts,
+            "encoding_format": "float"
+        }
+
+        response = requests.post(
+            self.api_url,
+            headers=self.headers,
+            json=payload,
+            timeout=self.timeout
+        )
+
+        response.raise_for_status()
+        data = response.json()
+
+        embeddings = [item["embedding"] for item in data["data"]]
+
+        if normalize:
+            embeddings = [self._normalize(vec) for vec in embeddings]
+
+        return embeddings[0] if single else embeddings
+
+    @staticmethod
+    def _normalize(vec):
+        norm = sum(v * v for v in vec) ** 0.5
+        return [v / norm for v in vec] if norm > 0 else vec
 
 
 if __name__ == "__main__":
