@@ -1,184 +1,148 @@
 import os
+import sys
 import json
 import csv
-from typing import List, Set
+import argparse
+from typing import List, Set, Tuple
 
-from src.core.llm import get_llm
-from langchain_core.messages import SystemMessage, HumanMessage
+# Cho phép chạy `python3 predict.py` từ root mà import được src/...
+sys.path.append(os.path.abspath("."))
 
-# Số câu tối đa xử lý mỗi lần chạy để tránh đụng quota 60 req/giờ
-MAX_CALLS_PER_RUN = 50
+from src.core.llm import get_llm, Router
 
-SYSTEM_PROMPT = (
-    "Bạn là trợ lý làm bài trắc nghiệm nhiều lựa chọn.\n"
-    "Với mỗi câu hỏi và danh sách các lựa chọn A, B, C, D, ... "
-    "hãy chọn ĐÚNG MỘT đáp án.\n\n"
-    "QUY TẮC BẮT BUỘC:\n"
-    "- CHỈ trả về duy nhất MỘT ký tự là chữ cái của đáp án (A, B, C, D, ...).\n"
-    "- KHÔNG giải thích, không thêm bất kỳ ký tự hay câu chữ nào khác.\n"
-    "- Không trả về nội dung của phương án, chỉ trả về chữ cái.\n"
-)
-
-def build_question_prompt(question_text: str, choices: List[str]) -> str:
-    """Tạo prompt cho 1 câu hỏi với các lựa chọn A, B, C, ..."""
-    lines = [f"Câu hỏi: {question_text}", "", "Các lựa chọn:"]
-    for idx, choice in enumerate(choices):
-        letter = chr(ord("A") + idx)
-        lines.append(f"{letter}. {choice}")
-    lines.append("")
-    lines.append("Hãy trả lời CHỈ MỘT ký tự là chữ cái của đáp án đúng (A, B, C, ...).")
-    return "\n".join(lines)
+# Handlers: mỗi handler chịu trách nhiệm xử lý logic đặc thù + tự chống policy block
+from src.query.math_logical_reasoning import solve_math_logical
+from src.query.restricted import solve_restricted
+from src.query.mandatory_accuracy import solve_mandatory_accuracy
+from src.query.long_text_questions import solve_long_text
 
 
-def parse_answer(raw_answer: str, num_choices: int) -> str:
-    """
-    Chuẩn hóa câu trả lời từ LLM thành một chữ cái A, B, C, ...
-    Nếu không parse được thì fallback về 'A' (cho an toàn, không crash).
-    """
-    if not raw_answer:
-        return "A"
+DEFAULT_TEST_PATH = os.path.join("data", "test.json")
+DEFAULT_SUBMISSION_PATH = "submission.csv"
 
-    text = raw_answer.strip().upper()
 
-    # Nếu chỉ có 1 ký tự và là A..Z thì dùng luôn
-    if len(text) == 1 and "A" <= text <= "Z":
-        idx = ord(text) - ord("A")
-        if 0 <= idx < num_choices:
-            return text
-
-    # Nếu model trả kiểu 'Đáp án: C', 'Tôi chọn phương án D', ...
-    for ch in text:
-        if "A" <= ch <= "Z":
-            idx = ord(ch) - ord("A")
-            if 0 <= idx < num_choices:
-                return ch
-
-    # Fallback an toàn
-    return "A"
+def load_test(test_path: str) -> List[dict]:
+    with open(test_path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 def load_answered_qids(submission_path: str) -> Set[str]:
-    """Đọc submission.csv nếu có, trả về tập các qid đã được trả lời."""
     answered = set()
     if os.path.exists(submission_path):
         with open(submission_path, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
-                qid = row.get("qid")
+                qid = (row.get("qid") or "").strip()
                 if qid:
                     answered.add(qid)
     return answered
 
 
+def ensure_csv_writer(submission_path: str) -> Tuple[csv.writer, "TextIO"]:
+    existed = os.path.exists(submission_path)
+    fh = open(submission_path, "a", newline="", encoding="utf-8")
+    writer = csv.writer(fh)
+    if not existed:
+        writer.writerow(["qid", "answer", "route"])
+        fh.flush()
+    return writer, fh
+
+
+def build_router_input(question: str, choices: List[str]) -> str:
+    # Router nhận 1 string; gộp cả choices để phân loại tốt hơn.
+    lines = [question, "", "Choices:"]
+    for i, c in enumerate(choices):
+        letter = chr(ord("A") + i)
+        lines.append(f"{letter}. {c}")
+    return "\n".join(lines)
+
+
+def normalize_datasource(ds: str) -> str:
+    # Chuẩn hoá label router để dispatch thống nhất.
+    if not ds:
+        return "Various_Domain"
+    ds = ds.strip()
+    if ds in ("Restricted", "Restricted_Questions"):
+        return "Restricted_Questions"
+    return ds
+
+
 def main():
-    # Đường dẫn trong container (WORKDIR đã là /code)
-    test_path = os.path.join("data", "test.json")
-    submission_path = "submission.csv"
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--test_path", default=DEFAULT_TEST_PATH)
+    parser.add_argument("--submission_path", default=DEFAULT_SUBMISSION_PATH)
+    parser.add_argument("--max_calls", type=int, default=50, help="Số câu tối đa xử lý mỗi lần chạy (quota-friendly).")
+    args = parser.parse_args()
 
-    # Load dữ liệu test
-    with open(test_path, "r", encoding="utf-8") as f:
-        test_data = json.load(f)
+    test_data = load_test(args.test_path)
+    answered_qids = load_answered_qids(args.submission_path)
+    print(f"Đã có {len(answered_qids)} câu đã trả lời trong {args.submission_path}")
 
-    # Đọc các qid đã trả lời (nếu có)
-    answered_qids = load_answered_qids(submission_path)
-    print(f"Đã có {len(answered_qids)} câu đã trả lời trong submission.csv")
+    writer, fh = ensure_csv_writer(args.submission_path)
 
-    # Chuẩn bị writer cho submission.csv (append nếu file đã tồn tại)
-    file_exists = os.path.exists(submission_path)
-    csv_file = open(submission_path, "a", newline="", encoding="utf-8")
-    writer = csv.writer(csv_file)
+    # Small LLM để trả lời (handlers có quyền tự dùng / hoặc bỏ qua)
+    small_cfg = {"temperature": 0.0, "top_p": 1.0, "top_k": 20, "max_tokens": 128}
+    llm_small = get_llm(type="small_vnpt", cfg=small_cfg)
 
-    # Nếu file mới tạo, ghi header
-    if not file_exists:
-        writer.writerow(["qid", "answer"])
+    # Router (large) – tự tạo large llm bên trong theo llm.py
+    router = Router(type_llm="large_vnpt")
 
-    # Khởi tạo LLM small VNPT
-    # Nếu get_llm của bạn có thêm tham số cfg/router, chỉnh lại dòng dưới cho khớp
-    small_cfg = {
-        "temperature": 0.0,
-        "top_p": 1.0,
-        "top_k": 20,
-        "max_tokens": 64,
+    # Dispatch table (predict chỉ điều phối)
+    DISPATCH = {
+        "Math_Logical_Reasoning": solve_math_logical,
+        "Restricted_Questions": solve_restricted,
+        "Mandatory_Accuracy_Questions": solve_mandatory_accuracy,
+        "Various_Domain": solve_mandatory_accuracy,
+        "Long_Text_Questions": solve_long_text,
     }
 
-    # Thử gọi với cfg (router version mới), nếu project cũ không nhận cfg thì fallback
-    try:
-        llm = get_llm("large_vnpt", cfg=small_cfg)
-    except TypeError:
-        # Trường hợp hàm get_llm cũ, không có tham số cfg
-        llm = get_llm("large_vnpt")
-
     calls_made = 0
-    total_questions = len(test_data)
+    total = len(test_data)
 
     try:
         for idx, item in enumerate(test_data, start=1):
-            qid = item["qid"]
+            qid = item.get("qid")
+            question = item.get("question", "")
+            choices = item.get("choices", [])
 
-            # Nếu đã có câu trả lời cho qid này thì bỏ qua
+            if not qid:
+                continue
+
             if qid in answered_qids:
                 print(f"[SKIP] qid={qid} đã có trong submission.csv")
                 continue
 
-            # Nếu đã đạt giới hạn cho run này thì dừng
-            if calls_made >= MAX_CALLS_PER_RUN:
-                print(f"Đã đạt MAX_CALLS_PER_RUN = {MAX_CALLS_PER_RUN}, dừng run hiện tại.")
+            if calls_made >= args.max_calls:
+                print(f"Đạt max_calls={args.max_calls}, dừng run.")
                 break
 
-            question = item["question"]
-            choices = item["choices"]
-
-            prompt = build_question_prompt(question, choices)
-
-            messages = [
-                SystemMessage(content=SYSTEM_PROMPT),
-                HumanMessage(content=prompt),
-            ]
-
+            # 1) Route trước (predict chỉ route; fallback policy/router error xử lý trong handler)
             try:
-                ai_msg = llm.invoke(messages)
-                raw_answer = getattr(ai_msg, "content", str(ai_msg))
-
-                # Nếu API trả về nội dung từ chối (nhạy cảm)
-                if "không thể trả lời" in raw_answer.lower() or "không thể phản hồi" in raw_answer.lower():
-                    print(f"[SENSITIVE] VNPT từ chối câu qid={qid}. Ghi answer rỗng.")
-                    writer.writerow([qid, ""])
-                    csv_file.flush()
-                    calls_made += 1
-                    continue
-
+                route_info = router.route(build_router_input(question, choices))
+                datasource = normalize_datasource(route_info.get("datasource", "Various_Domain"))
             except Exception as e:
-                # Nếu lỗi là dạng "VNPT API logical error response: {...}" → API từ chối
-                msg = str(e)
-                if "VNPT API logical error response" in msg and "BadRequestError" in msg:
-                    print(f"[SENSITIVE-ERROR] VNPT từ chối qid={qid}. Ghi answer rỗng.")
-                    writer.writerow([qid, ""])
-                    csv_file.flush()
-                    calls_made += 1
-                    continue
+                # Router có thể bị policy block trên câu nhạy cảm.
+                # predict không phân tích e; chỉ fallback sang Restricted handler.
+                datasource = "Restricted_Questions"
 
-                # còn lại là lỗi thật → dừng run
-                print(f"[ERROR] Lỗi khi gọi LLM cho qid={qid}: {e}")
-                break
+            # 2) Dispatch handler
+            handler = DISPATCH.get(datasource, solve_mandatory_accuracy)
 
-            answer_letter = parse_answer(raw_answer, num_choices=len(choices))
+            # 3) Handler tự chịu trách nhiệm: heuristics, policy block, fallback answer...
+            # Quy ước: handler luôn trả về 'A'/'B'/... hoặc '' (rỗng) nếu quyết định không trả lời.
+            ans = handler(llm_small, question, choices)
 
-            writer.writerow([qid, answer_letter])
-            csv_file.flush()  # Đảm bảo ghi ngay ra đĩa
-
+            writer.writerow([qid, ans, datasource])
+            fh.flush()
+            answered_qids.add(qid)
             calls_made += 1
-            print(
-                f"[{idx}/{total_questions}] qid={qid} -> {answer_letter} "
-                f"(raw: {raw_answer!r}) | calls_made={calls_made}"
-            )
-    finally:
-        csv_file.close()
 
-    print(
-        f"Run này đã xử lý thêm {calls_made} câu mới. "
-        f"Tổng số câu đã có trong submission.csv bây giờ sẽ là ~{len(answered_qids) + calls_made}."
-    )
-    print("Bạn có thể chạy lại script sau khi qua giới hạn 60 req/giờ để tiếp tục.")
+            print(f"[OK] {idx}/{total} qid={qid} -> {ans} | route={datasource} | calls={calls_made}")
+
+    finally:
+        fh.close()
+
+    print(f"Run này đã xử lý thêm {calls_made} câu mới. Bạn có thể chạy lại để resume.")
 
 
 if __name__ == "__main__":
