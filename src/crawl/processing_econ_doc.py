@@ -1,81 +1,130 @@
 import re
+import faiss
+import numpy as np
+import json
+import os
+from typing import List, Dict
 
 def count_words_clean(text: str) -> int:
     text = re.sub(r"[^\w\s]", " ", text)
     return len(text.split())
 
-path_marco = 'data/econ/macro.md'
+def get_data_macro(path_marco):
+    with open(path_marco, 'r') as f:
+        data = f.read()
+        
+    data = data.split('###')
+    metadatas = [
+        {'chunk_id': f'marco_econ_{i}', "source": section.split('\n')[0]} for i, section in enumerate(data)
+    ]
+    return data, metadatas
 
-with open(path_marco, 'r') as f:
-    data = f.read()
-    
-data = data.split('###')
+import re
+from typing import Dict, Any
 
 
-# import re
-# from collections import defaultdict
+import re
+from typing import List, Dict
 
-# import re
 
-# def parse_note(text: str):
-#     result = {
-#         "id": None,
-#         "title": None,
-#         "section": None,
-#         "definitions": [],
-#         "formulas": [],
-#         "rules": [],
-#         "traps": []
-#     }
+def parse_markdown_to_tree(text: str) -> Dict:
+    lines = text.splitlines()
 
-#     current_block = None
+    root = {
+        "title": None,
+        "level": 0,
+        "content": "",
+        "subsection": []
+    }
 
-#     lines = [l.rstrip() for l in text.splitlines() if l.strip()]
+    stack = [root]
 
-#     for line in lines:
-#         # [M4-001] Title
-#         m = re.match(r'\[(.*?)\]\s*(.*)', line)
-#         if m:
-#             result["id"] = m.group(1)
-#             result["title"] = m.group(2)
-#             continue
+    for line in lines:
+        line = line.rstrip()
+        if not line:
+            continue
 
-#         # Section
-#         if line.startswith("- **Phần/Mục:**"):
-#             result["section"] = line.split("**Phần/Mục:**")[-1].strip()
-#             continue
+        match = re.match(r'^(#+)\s+(.*)', line)
+        if match:
+            level = len(match.group(1))
+            title = match.group(2).strip()
 
-#         # Block headers
-#         if "**Định nghĩa lõi:**" in line:
-#             current_block = "definitions"
-#             result[current_block] = ''
-#             continue
-#         if "**Công thức/Quan hệ:**" in line:
-#             current_block = "formulas"
-#             result[current_block] = ''
-#             continue
-#         if "**Quy tắc suy luận nhanh" in line:
-#             current_block = "rules"
-#             result[current_block] = ''
-#             continue
-#         if "**Bẫy" in line:
-#             current_block = "traps"
-#             result[current_block] = ''
-#             continue
+            node = {
+                "title": title,
+                "level": level,
+                "content": "",
+                "subsection": []
+            }
 
-#         # Bullet content
-#         if current_block:
-#             result[current_block] += line + '\n'
+            # pop đến đúng level cha
+            while stack and stack[-1]["level"] >= level:
+                stack.pop()
 
-#     return result
+            stack[-1]["subsection"].append(node)
+            stack.append(node)
+        else:
+            # content thường (không phải heading)
+            stack[-1]["content"] += line + "\n"
 
-# section_data = []
-# for i, text in enumerate(data):
-#     section = {}
-#     struct = parse_note(text)
-#     if len(struct.keys()) != 7:
-#         print('Không đúng cấu trúc', i)
-#     section['title'] = text.split('\n')[0]
-#     section['secs'] = list(struct.values())[2:]
-#     section_data.append(section)
-# print(section_data[1])
+    return root["subsection"][0] if root["subsection"] else root
+
+def collect_chunks(tree):
+    chunks = []
+    metadatas = []
+    def dfs(node, context_titles, idx=0):
+        level = node["level"]
+        title = node["title"]
+        content = "".join(node["content"])
+
+        # cập nhật context
+        if level > 0:
+            context_titles = context_titles + [title]
+
+        # Nếu là bậc 3
+        if level == 3:
+            if node["subsection"]:  # có bậc 4
+                for child in node["subsection"]:
+                    child_text = "".join(child["content"])
+                    chunk_text = "\n".join([
+                        " > ".join(context_titles),  # bậc 1-2-3
+                        child["title"],
+                        child_text
+                    ])
+                    chunks.append(chunk_text)
+                    metadatas.append({
+                        'chunk_id': f"micro_econ_{idx}",
+                        'source': " > ".join(context_titles)
+                    })
+                    idx += 1
+            else:
+                chunk_text = "\n".join([
+                    " > ".join(context_titles[:-1]),  # bậc 1-2
+                    title,
+                    content
+                ])
+                chunks.append(chunk_text)
+                metadatas.append({
+                    'chunk_id': f"micro_econ_{idx}",
+                    'source': " > ".join(context_titles[:-1])
+                })
+                idx += 1
+        if 'subsection' in node:
+            for child in node["subsection"]:
+                idx = dfs(child, context_titles, idx+1)
+        return idx
+
+    dfs(tree, [])
+    return chunks, metadatas
+
+def get_data_micro(path_micro):
+    with open(path_micro, 'r') as f:
+        data = f.read()
+    tree = parse_markdown_to_tree(data)
+    chunks, metadatas = collect_chunks(tree)
+    return chunks, metadatas
+
+def get_data(path):
+    if 'macro' in path:
+        return get_data_macro(path)
+    else:
+        return get_data_micro(path)
