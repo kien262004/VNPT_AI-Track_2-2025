@@ -1,3 +1,6 @@
+# Các hàm tận dụng
+ - Trong file `src/core/llm.py` có `get_llm` để 
+
 # Hướng thực hiện
 - Sử dụng Module Router nhằm phân tách các task, mỗi task 1 cách thực hiện
 - `Math_Logical_Reasoning`: Cần yêu cầu llm sinh theo từ cơ sở 1, có thể lưu các định lý, công thức nếu cần

@@ -156,7 +156,6 @@ class SmallLLM(BaseChatModel):
         if "choices" not in res:
             raise ValueError(f"VNPT API logical error response: {res}")
 
-        print("VNPT API response:", res)
         text = res["choices"][0]["message"]["content"]
 
         return ChatResult(
