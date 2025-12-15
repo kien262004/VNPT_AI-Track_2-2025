@@ -5,7 +5,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
-from typing import Optional, List, Mapping, Any
+from typing import Optional, List, Mapping, Any, Union
 import requests
 import json
 
@@ -275,14 +275,14 @@ class VNPTAIEmbeddingClient:
         model: str = "vnptai_hackathon_embedding",
         timeout: int = 30
     ):
-        self.api_url = api_url
+        self.api_url = 'https://api.idg.vnpt.vn/data-service/vnptai-hackathon-embedding'
         self.model = model
         self.timeout = timeout
 
         self.headers = {
-            "Authorization": f"Bearer {bearer_token}",
-            "Token-id": token_id,
-            "Token-key": token_key,
+            "Authorization": f"Bearer {os.getenv('AUTHORIZATION_VNPT_EMBED')}",
+            "Token-id": os.getenv('TOKEN_ID_VNPT_EMBED'),
+            "Token-key": os.getenv('TOKEN_KEY_VNPT_EMBED'),
             "Content-Type": "application/json",
         }
 
@@ -331,5 +331,6 @@ class VNPTAIEmbeddingClient:
 
 
 if __name__ == "__main__":
-    llm = get_llm(type="large_vnpt", cfg={"response_format": {"type": "json_object"}})
+    llm = VNPTAIEmbeddingClient()
+    llm.embed("Hello")
     
