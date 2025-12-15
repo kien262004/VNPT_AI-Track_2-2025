@@ -1,4 +1,4 @@
-from curses import raw
+# from curses import raw
 import os
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
