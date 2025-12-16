@@ -147,7 +147,7 @@ class SmallLLM(BaseChatModel):
                 "https://api.idg.vnpt.vn/data-service/v1/chat/completions/vnptai-hackathon-small",
                 headers=headers,
                 json=json_data,
-                timeout=15
+                timeout=100
             ).json()
         except Exception as e:
             raise ValueError(f"VNPT API request error: {e}")
@@ -225,7 +225,7 @@ class LargeLLM(BaseChatModel):
                 "https://api.idg.vnpt.vn/data-service/v1/chat/completions/vnptai-hackathon-large",
                 headers=headers,
                 json=json_data,
-                timeout=15
+                timeout=100
             ).json()
         except Exception as e:
             raise ValueError(f"VNPT API request error: {e}")
@@ -273,7 +273,7 @@ class VNPTAIEmbeddingClient:
     def __init__(
         self,
         model: str = "vnptai_hackathon_embedding",
-        timeout: int = 30
+        timeout: int = 100
     ):
         self.api_url = 'https://api.idg.vnpt.vn/data-service/vnptai-hackathon-embedding'
         self.model = model
