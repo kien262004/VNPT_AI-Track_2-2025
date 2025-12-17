@@ -91,10 +91,10 @@ class SmallLLM(BaseChatModel):
     temperature: float = 0.3
     top_p: float = 1.0
     top_k: int = 20
-    max_tokens: int = 512
+    max_tokens: int = 1024
     response_format: Optional[dict] = None
     
-    def __init__(self, temperature: float = 0.3, top_p: float = 1.0, top_k: int = 20, max_tokens: int = 512, response_format: Optional[dict] = None) -> None:
+    def __init__(self, temperature: float = 0.3, top_p: float = 1.0, top_k: int = 20, max_tokens: int = 1024, response_format: Optional[dict] = None) -> None:
         super().__init__()
         self.temperature = temperature
         self.top_p = top_p
@@ -167,10 +167,10 @@ class LargeLLM(BaseChatModel):
     temperature: float = 0.3
     top_p: float = 1.0
     top_k: int = 20
-    max_tokens: int = 256
+    max_tokens: int = 1024
     response_format: Optional[dict] = None
     
-    def __init__(self, temperature: float = 0.3, top_p: float = 1.0, top_k: int = 20, max_tokens: int = 256, response_format=None) -> None:
+    def __init__(self, temperature: float = 0.3, top_p: float = 1.0, top_k: int = 20, max_tokens: int = 1024, response_format=None) -> None:
         super().__init__()
         self.temperature = temperature
         self.top_p = top_p
