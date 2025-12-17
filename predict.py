@@ -8,7 +8,7 @@ from typing import List, Dict, Set, Tuple, Optional
 # Cho phép chạy `python3 predict.py` từ root mà import được src/...
 sys.path.append(os.path.abspath("."))
 
-from src.core.llm import get_llm, Router
+from src.core import get_llm, Router, VectorDB
 
 # Handlers: mỗi handler chịu trách nhiệm logic đặc thù + tự chống policy block nếu cần
 from src.query.math_logical_reasoning import solve_math_logical
@@ -21,6 +21,13 @@ from src.query.long_text_questions import solve_long_text
 DEFAULT_TEST_PATH = "/code/private_test.json"
 DEFAULT_SUBMISSION_PATH = "/code/submission.csv"
 DEFAULT_DEBUG_PATH = "/code/submission_debug.csv"
+
+METADATA_BOOK_PATH = 'databse/chunks_textbook.json'
+EMBEDDED_BOOK_PATH = 'embedded_chunks_textbook.index'
+
+METADATA_WEB_PATH = 'databse/chunks_web.json'
+EMBEDDED_WEB_PATH = 'embedded_chunks_web.index'
+
 
 
 def load_test(test_path: str) -> List[dict]:
@@ -170,11 +177,11 @@ def main():
     dbg_writer, dbg_fh = ensure_csv_writer_3cols(debug_path)
 
     # init small llm for answering
-    small_cfg = {"temperature": 0.0, "top_p": 1.0, "top_k": 20, "max_tokens": 128}
-    llm_small = get_llm(type="small_vnpt", cfg=small_cfg)
+    cfg = {"temperature": 0.0, "top_p": 1.0, "top_k": 20, "max_tokens": 512, "response_format": {"type": "json_object"}}
+    llm_small = get_llm(type="large_vnpt", cfg=cfg)
 
     # router (large) – dùng cho classify/route
-    router = Router(type_llm="large_vnpt")
+    router = Router(type_llm="small_vnpt")
 
     DISPATCH = {
         "Math_Logical_Reasoning": solve_math_logical,
@@ -216,6 +223,9 @@ def main():
 
                 routed_cache[qid] = datasource
                 _save_routed_tmp(routed_tmp_path, routed_cache)
+
+            # ====== RAG ======
+            VectorDB()
 
             # ====== ANSWER ======
             handler = DISPATCH.get(datasource, solve_mandatory_accuracy)

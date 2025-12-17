@@ -36,7 +36,7 @@ def find_refusal_choice_letter(choices: List[str]) -> Optional[str]:
         return None
     return chr(ord("A") + best_i)
 
-def solve_restricted(llm, question: str, choices: List[str]) -> str:
+def solve_restricted(llm, question: str, choices: List[str], context: List[str], debug=False) -> str:
     """
     Restricted handler: KHÔNG gọi LLM.
     - Nếu có phương án từ chối: chọn nó

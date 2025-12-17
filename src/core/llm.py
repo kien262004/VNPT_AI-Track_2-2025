@@ -267,7 +267,14 @@ class Router:
             }
         data = self.chain.invoke({"question": question})
         raw = data.content.encode('utf-8')
-        return json.loads(raw)
+        try:
+            res = json.loads(raw)
+        except:
+            res = {
+                "datasource": "Math_Logical_Reasoning",
+                "reasoning": f"Quá trình json load lỗi do không đúng định dạng json (thường do công thức toán học)"
+            }
+        return res
 
 class VNPTAIEmbeddingClient:
     def __init__(
@@ -332,5 +339,7 @@ class VNPTAIEmbeddingClient:
 
 if __name__ == "__main__":
     llm = VNPTAIEmbeddingClient()
-    llm.embed("Hello")
+    vec = llm.embed("Hello")
+    norm = sum(v * v for v in vec) ** 0.5
+    print(norm)
     

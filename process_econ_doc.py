@@ -17,6 +17,7 @@ files = [
 ]
 embedder = VNPTAIEmbeddingClient()
 dim = len(embedder.embed('dump'))
+
 store = FaissVectorStore(dim)
 
 for filename in files:

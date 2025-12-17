@@ -5,12 +5,16 @@ from typing import List
 def idx_to_letter(i: int) -> str:
     return chr(ord("A") + i)
 
-def build_mcq_prompt(question: str, choices: List[str]) -> str:
+def build_mcq_prompt(question: str, choices: List[str], contexts: List[str] = None) -> str:
     lines = [f"Câu hỏi: {question}", "", "Các lựa chọn:"]
     for i, c in enumerate(choices):
         lines.append(f"{idx_to_letter(i)}. {c}")
     lines.append("")
     lines.append("CHỈ trả lời DUY NHẤT 1 ký tự là chữ cái đáp án (A, B, C, ...).")
+    if contexts is not None:
+        lines.append("\nCác thông tin bổ trợ:")
+        for context in contexts:
+            lines.append(context)
     return "\n".join(lines)
 
 def parse_answer_letter(raw: str, num_choices: int) -> str:
