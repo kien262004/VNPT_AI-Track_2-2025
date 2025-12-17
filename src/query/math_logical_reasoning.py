@@ -36,7 +36,8 @@ def solve_math_logical(
     try:
         raw = json.loads(raw.encode())
         if debug:
-            print(raw['thinking'])
+            print("DEBUG: Thinking", raw['thinking'])
+            print("DEBUG: Answer", raw['answer'])
         raw = raw['answer']
     except:
         print('ERROR: không đúng định dạng json')

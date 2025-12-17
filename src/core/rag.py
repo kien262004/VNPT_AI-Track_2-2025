@@ -150,7 +150,7 @@ class VectorDB:
             item = metadata[idx]
             results.append({
                 "score": float(score),
-                "text": item["text"],
+                "text": item["content"],
                 "source": source,
             })
         return results

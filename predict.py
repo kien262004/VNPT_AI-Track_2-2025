@@ -3,12 +3,13 @@ import sys
 import json
 import csv
 import argparse
+import numpy as np
 from typing import List, Dict, Set, Tuple, Optional
 
 # Cho phép chạy `python3 predict.py` từ root mà import được src/...
 sys.path.append(os.path.abspath("."))
 
-from src.core import get_llm, Router, VectorDB
+from src.core import get_llm, Router, VectorDB, VNPTAIEmbeddingClient
 
 # Handlers: mỗi handler chịu trách nhiệm logic đặc thù + tự chống policy block nếu cần
 from src.query.math_logical_reasoning import solve_math_logical
@@ -22,11 +23,13 @@ DEFAULT_TEST_PATH = "/code/private_test.json"
 DEFAULT_SUBMISSION_PATH = "/code/submission.csv"
 DEFAULT_DEBUG_PATH = "/code/submission_debug.csv"
 
-METADATA_BOOK_PATH = 'databse/chunks_textbook.json'
-EMBEDDED_BOOK_PATH = 'embedded_chunks_textbook.index'
+METADATA_BOOK_PATH = 'database/chunks_textbook.json'
+EMBEDDED_BOOK_PATH = 'database/embedded_chunks_textbook.index'
 
-METADATA_WEB_PATH = 'databse/chunks_web.json'
-EMBEDDED_WEB_PATH = 'embedded_chunks_web.index'
+METADATA_WEB_PATH = 'database/chunks_web.json'
+EMBEDDED_WEB_PATH = 'database/embedded_chunks_web.index'
+
+DEBUG = True
 
 
 
@@ -182,6 +185,14 @@ def main():
 
     # router (large) – dùng cho classify/route
     router = Router(type_llm="small_vnpt")
+    
+    rag = VectorDB(
+        EMBEDDED_BOOK_PATH,
+        METADATA_BOOK_PATH,
+        EMBEDDED_WEB_PATH,
+        METADATA_WEB_PATH
+    )
+    embedder = VNPTAIEmbeddingClient()
 
     DISPATCH = {
         "Math_Logical_Reasoning": solve_math_logical,
@@ -225,11 +236,29 @@ def main():
                 _save_routed_tmp(routed_tmp_path, routed_cache)
 
             # ====== RAG ======
-            VectorDB()
+            query_context = []
+
+            if DEBUG:
+                print('DEBUG: Loại task', datasource)
+                
+            if datasource in ['Math_Logical_Reasoning', 'Mandatory_Accuracy_Questions', 'Various_Domain']:
+                query = question + '\n' + '\n'.join(choices)
+                embedding_query = np.array(embedder.embed(query))
+                rag_context = rag.retrieve(embedding_query)
+                if DEBUG:
+                    print("DEBUG: Hiển thị kết quả RAG")
+                    print(f"Số lượng context: {len(rag_context)}")
+                    
+                for con in rag_context:
+                    query_context.append(con.get('text', ''))
+                
+            else:
+                if DEBUG:
+                    print("DEBUG: Query không cần RAG")
 
             # ====== ANSWER ======
             handler = DISPATCH.get(datasource, solve_mandatory_accuracy)
-            ans = handler(llm_small, question, choices)
+            ans = handler(llm_small, question, choices, query_context, DEBUG)
 
             # BTC submission (2 cols)
             sub_writer.writerow([qid, ans])
@@ -242,7 +271,8 @@ def main():
             answered_qids.add(qid)
             calls_made += 1
             print(f"[OK] {idx}/{total} qid={qid} -> {ans} | route={datasource} | calls={calls_made}")
-
+            if DEBUG:
+                print('DEBUG: Kết thúc 1 vòng lặp\n')
     finally:
         sub_fh.close()
         dbg_fh.close()

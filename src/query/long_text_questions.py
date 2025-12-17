@@ -172,15 +172,14 @@ def count_words(text: str) -> int:
     return len(words)
 
 def split_query(query: str):
-    info = query['question'].split("Câu hỏi:")
+    info = query.split("Câu hỏi:")
     context = info[0].split('\n\n')
     question = info[1]
     
     chunk = []
     for i, raw_chunk in enumerate(context):
-        print(count_words(raw_chunk))
         if count_words(raw_chunk) < 10:
-            if i < len(context):
+            if i < len(context)-1:
                 context[i+1] = raw_chunk + '\n' + context[i+1]
         else:
             chunk.append(raw_chunk) 
@@ -226,7 +225,8 @@ def solve_long_text(llm, question: str, choices: List[str], _ = None, debug=Fals
     try:
         raw = json.loads(raw.encode())
         if debug:
-            print(raw['thinking'])
+            print("DEBUG: Thinking", raw['thinking'])
+            print("DEBUG: Answer", raw['answer'])
         raw = raw['answer']
     except:
         print('ERROR: không đúng định dạng json')
