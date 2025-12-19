@@ -60,25 +60,6 @@ Hệ thống gồm 2 phần chính:
 - **Mandatory_Accuracy_Questions**: cần độ chính xác cao → tăng cường retrieval web/corpus.
 - **Various_Domain**: domain tổng hợp → RAG.
 
-#### Sơ đồ luồng
-```mermaid
-flowchart TD
-    A[Question (MCQ)] --> B{Router}
-    B -->|Restricted| R[Refuse / choose "không trả lời" option]
-    B -->|Long_Text| LT[Chunk passage -> Passage-RAG]
-    B -->|Math_Logical_Reasoning| M[RAG theorem/formula (optional) -> Reasoning Prompt]
-    B -->|Mandatory_Accuracy| MA[Web/Cached Retrieval -> RAG]
-    B -->|Various_Domain| VD[Retrieval -> RAG]
-    R --> O[Pick answer]
-    LT --> O
-    M --> O
-    MA --> O
-    VD --> O
-    O --> S[submission.csv]
-```
-
----
-
 ## 3. Data Processing
 
 ### 3.1 Crawl corpus (Web)
