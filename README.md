@@ -99,6 +99,8 @@ Nếu dùng GPU: **bắt buộc CUDA 12.2** (khuyến nghị base image `nvidia/
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+python src/config/config.py
+
 
 # chạy inference local
 python predict.py
