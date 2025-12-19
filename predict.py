@@ -155,7 +155,7 @@ def main():
     parser.add_argument(
         "--max_calls",
         type=int,
-        default=20,
+        default=100000,
         help="Giới hạn số câu trả lời mỗi lần chạy (quota-friendly).",
     )
     args = parser.parse_args()
@@ -179,8 +179,8 @@ def main():
     sub_writer, sub_fh = ensure_csv_writer_2cols(submission_path)
     dbg_writer, dbg_fh = ensure_csv_writer_3cols(debug_path)
 
-    # init small llm for answering
-    cfg = {"temperature": 0.0, "top_p": 1.0, "top_k": 20, "max_tokens": 512, "response_format": {"type": "json_object"}}
+    # init large llm for answering
+    cfg = {"temperature": 0.0, "top_p": 1.0, "top_k": 20, "max_tokens": 1024, "response_format": {"type": "json_object"}}
     llm_small = get_llm(type="large_vnpt", cfg=cfg)
 
     # router (large) – dùng cho classify/route
