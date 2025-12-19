@@ -31,6 +31,8 @@ Hệ thống gồm 2 phần chính:
 ---
 
 ## 2. Pipeline Flow (End-to-End)
+![Pipeline overview](overall.png)
+
 
 ### 2.1. Offline: Build corpus → Vector Database
 
